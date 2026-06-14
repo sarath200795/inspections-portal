@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CalendarPlus, Repeat, Clock, Trash2 } from 'lucide-react'
+import { CalendarPlus, Repeat, Clock, Trash2, Check, Globe } from 'lucide-react'
 import { Modal, StatusPill } from '../../components/ui'
 import { useData } from '../../context/DataContext'
 import { ASSIGNMENT_FREQUENCIES, formatDateOnly } from '../../lib/schedule'
@@ -19,7 +19,7 @@ export default function InspectionAssignmentsModal({ template, currentUserEmail,
   const todayIso = formatDateOnly(new Date())
   const { sites } = useData()
 
-  const [newSiteId, setNewSiteId] = useState(template.siteId || '')
+  const [newSiteIds, setNewSiteIds] = useState(template.siteId ? [template.siteId] : [])
   const [newArea, setNewArea] = useState('')
   const [newDate, setNewDate] = useState('')
   const [newEndDate, setNewEndDate] = useState('')
@@ -45,15 +45,19 @@ export default function InspectionAssignmentsModal({ template, currentUserEmail,
     }
   }
 
+  // Toggle one site in/out of the selection.
+  const toggleSite = (id) =>
+    setNewSiteIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+  const allSelected = sites.length > 0 && newSiteIds.length === sites.length
+  const toggleAll = () => setNewSiteIds(allSelected ? [] : sites.map((s) => s.id))
+
   const handleAdd = async () => {
-    if (sites.length && !newSiteId) return alert('Please pick a site.')
+    if (sites.length && newSiteIds.length === 0) return alert('Please pick at least one site (or “All sites”).')
     if (!newDate) return alert('Please pick a start date.')
     if (newEndDate && newEndDate < newDate) return alert('End date is before start date.')
-    const site = sites.find((s) => s.id === newSiteId)
-    const assignment = {
-      id: `asn-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-      siteId: newSiteId,
-      siteName: site?.name || '',
+
+    const now = Date.now()
+    const base = {
       area: newArea.trim(),
       scheduledDate: newDate,
       frequency: newFrequency === 'One-off' ? '' : newFrequency,
@@ -64,7 +68,18 @@ export default function InspectionAssignmentsModal({ template, currentUserEmail,
       createdBy: currentUserEmail || '',
       history: [],
     }
-    await persist([...existing, assignment])
+    // One concrete assignment per selected site (or a single site-less one when
+    // no sites exist yet) — keeps scheduling/filtering per-site as before.
+    const targets = sites.length ? newSiteIds : ['']
+    const additions = targets.map((siteId, i) => ({
+      id: `asn-${now}-${i}-${Math.floor(Math.random() * 10000)}`,
+      siteId,
+      siteName: sites.find((s) => s.id === siteId)?.name || '',
+      ...base,
+    }))
+
+    await persist([...existing, ...additions])
+    setNewSiteIds([])
     setNewArea('')
     setNewDate('')
     setNewEndDate('')
@@ -122,15 +137,35 @@ export default function InspectionAssignmentsModal({ template, currentUserEmail,
             No sites yet — an admin can add sites under <strong>Sites</strong> so you can target one. You can still schedule without a site for now.
           </div>
         )}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className="label">Site {sites.length ? '*' : ''}</label>
-            <select className="input" value={newSiteId} onChange={(e) => setNewSiteId(e.target.value)} disabled={!sites.length}>
-              <option value="">{sites.length ? 'Select a site…' : 'No sites available'}</option>
-              {sites.map((s) => <option key={s.id} value={s.id}>{s.name}{s.code ? ` (${s.code})` : ''}</option>)}
-            </select>
+        {/* Site picker: pick one, several, or all sites at once */}
+        {sites.length > 0 && (
+          <div className="mb-3">
+            <label className="label">Sites *</label>
+            {/* recessed clay tray holding raised clay chips */}
+            <div className="flex flex-wrap gap-2 rounded-2xl bg-clay-surface p-2.5 shadow-clay-inset">
+              <button type="button" onClick={toggleAll}
+                className={`chip transition ${allSelected ? 'bg-brand-600 text-white shadow-clay-brand' : 'bg-clay-surface text-ink-600 shadow-clay-sm'}`}>
+                {allSelected ? <Check size={12} /> : <Globe size={12} />} All sites
+              </button>
+              {sites.map((s) => {
+                const sel = newSiteIds.includes(s.id)
+                return (
+                  <button key={s.id} type="button" onClick={() => toggleSite(s.id)}
+                    className={`chip transition ${sel ? 'bg-brand-500 text-white shadow-clay-brand' : 'bg-clay-surface text-ink-600 shadow-clay-sm'}`}>
+                    {sel && <Check size={12} />}{s.name}{s.code ? ` (${s.code})` : ''}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-1.5 text-[11px] text-ink-400">
+              {newSiteIds.length === 0
+                ? 'Pick one or more sites, or “All sites”.'
+                : `${newSiteIds.length} site${newSiteIds.length === 1 ? '' : 's'} selected — one assignment will be created per site.`}
+            </p>
           </div>
-          <div>
+        )}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
             <label className="label">Area / sub-location (optional)</label>
             <input className="input" value={newArea} placeholder="e.g. Warehouse B"
               onChange={(e) => setNewArea(e.target.value)} />
@@ -159,8 +194,8 @@ export default function InspectionAssignmentsModal({ template, currentUserEmail,
               onChange={(e) => setNewNotes(e.target.value)} />
           </div>
         </div>
-        <button className="btn-primary mt-3" disabled={busy || !newDate} onClick={handleAdd}>
-          <CalendarPlus size={16} /> Add assignment
+        <button className="btn-primary mt-3" disabled={busy || !newDate || (sites.length > 0 && newSiteIds.length === 0)} onClick={handleAdd}>
+          <CalendarPlus size={16} /> {sites.length > 0 && newSiteIds.length > 1 ? `Add ${newSiteIds.length} assignments` : 'Add assignment'}
         </button>
       </div>
 
