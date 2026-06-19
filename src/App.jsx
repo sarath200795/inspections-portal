@@ -1,6 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { AnimatePresence } from 'framer-motion'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import PublicOnlyRoute from './components/PublicOnlyRoute'
 import Layout from './components/Layout'
@@ -38,39 +37,36 @@ function AppShell() {
 }
 
 export default function App() {
-  const location = useLocation()
   if (!isFirebaseConfigured) return <SetupNeeded />
   return (
     <Suspense fallback={<FullScreenLoader label="Loading…" />}>
-      <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
-          <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
-          <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
-          <Route path="/signup" element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>} />
-          <Route path="/register-org" element={<PublicOnlyRoute><RegisterOrg /></PublicOnlyRoute>} />
-          <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPassword /></PublicOnlyRoute>} />
-          <Route path="/pending" element={<PendingApproval />} />
-          <Route path="/privacy" element={<Legal kind="privacy" />} />
-          <Route path="/terms" element={<Legal kind="terms" />} />
+      <Routes>
+        <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
+        <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+        <Route path="/signup" element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>} />
+        <Route path="/register-org" element={<PublicOnlyRoute><RegisterOrg /></PublicOnlyRoute>} />
+        <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPassword /></PublicOnlyRoute>} />
+        <Route path="/pending" element={<PendingApproval />} />
+        <Route path="/privacy" element={<Legal kind="privacy" />} />
+        <Route path="/terms" element={<Legal kind="terms" />} />
 
-          <Route path="/app" element={<AppShell />}>
-            <Route index element={<Navigate to="/app/dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="schedule" element={<Schedule />} />
-            <Route path="overdue" element={<Overdue />} />
-            <Route path="forms" element={<Forms />} />
-            <Route path="forms/new" element={<FormBuilder />} />
-            <Route path="forms/:id/edit" element={<FormBuilder />} />
-            <Route path="execute" element={<Execute />} />
-            <Route path="records" element={<Records />} />
-            <Route path="sites" element={<ProtectedRoute adminOnly><Sites /></ProtectedRoute>} />
-            <Route path="users" element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
-            <Route path="audit" element={<ProtectedRoute adminOnly><AuditLog /></ProtectedRoute>} />
-          </Route>
+        <Route path="/app" element={<AppShell />}>
+          <Route index element={<Navigate to="/app/dashboard" replace />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="schedule" element={<Schedule />} />
+          <Route path="overdue" element={<Overdue />} />
+          <Route path="forms" element={<Forms />} />
+          <Route path="forms/new" element={<FormBuilder />} />
+          <Route path="forms/:id/edit" element={<FormBuilder />} />
+          <Route path="execute" element={<Execute />} />
+          <Route path="records" element={<Records />} />
+          <Route path="sites" element={<ProtectedRoute adminOnly><Sites /></ProtectedRoute>} />
+          <Route path="users" element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
+          <Route path="audit" element={<ProtectedRoute adminOnly><AuditLog /></ProtectedRoute>} />
+        </Route>
 
-          <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
-        </Routes>
-      </AnimatePresence>
+        <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
+      </Routes>
     </Suspense>
   )
 }
