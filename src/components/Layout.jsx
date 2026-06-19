@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Link, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Link, useNavigate, useLocation, useOutlet } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard,
@@ -62,6 +62,8 @@ export default function Layout() {
   const { profile, orgName, isAdmin, signOut } = useAuth()
   const { overdueTasks, dueTodayTasks, pendingUsers } = useData()
   const navigate = useNavigate()
+  const location = useLocation()
+  const outlet = useOutlet()
   const [mobileOpen, setMobileOpen] = useState(false)
   const close = () => setMobileOpen(false)
 
@@ -165,7 +167,17 @@ export default function Layout() {
         </header>
 
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          <Outlet />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.25 }}
+            >
+              {outlet}
+            </motion.div>
+          </AnimatePresence>
         </main>
 
         <footer className="no-print mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-6 text-xs text-ink-400 sm:px-6 lg:px-8">
