@@ -25,6 +25,18 @@ const ls = {
 const loop = (d) => ({ duration: d, repeat: Infinity, ease: 'easeInOut' })
 const IDLE_SLEEP_MS = 3 * 60 * 1000
 
+// First-login walkthrough. Sam walks across the screen and narrates each of the
+// core pages, navigating the app as he goes. Runs once per user (persisted),
+// and can be replayed from the panel.
+const TOUR = [
+  { to: '/app/dashboard', title: 'Welcome aboard! 👷', text: "I'm Sam, your inspection guide. Let me show you around — this is your Dashboard, a live overview of forms, what's due and what's overdue." },
+  { to: '/app/forms', title: 'Inspection Forms', text: 'Build your checklists here, then hit “Assign” to schedule a form to a site and date. The same form can go to several sites.' },
+  { to: '/app/schedule', title: 'Schedule', text: 'Your month calendar of upcoming inspections. Click any tile to run that inspection — done ones turn green or red with their score.' },
+  { to: '/app/overdue', title: 'Overdue', text: "Anything past its due date lands here. Tackle these first — I'll always flag the count on my badge." },
+  { to: '/app/records', title: 'Records', text: 'Every completed inspection with its score, findings and full responses. Search and filter by site, form or inspector.' },
+  { to: '/app/dashboard', title: "You're all set! 🎉", text: 'That’s the tour! Tap me anytime for help or to ask about your live data — try “what’s overdue?”. Happy inspecting!' },
+]
+
 const SKIN = '#e8b48f', SKIN_D = '#c98b62', HAT = '#f4b400', HAT_D = '#c98a00'
 const VEST = '#2563eb', VEST_D = '#1e40af', STRIPE = '#fde047', TROUSER = '#1e3a8a', SHOE = '#0b1220'
 
@@ -186,6 +198,7 @@ export default function Assistant() {
   const [facing, setFacing] = useState(-1)
   const [asleep, setAsleep] = useState(false)
   const [pinned, setPinned] = useState(() => ls.get(`insp:guide:pinned:${uid}`) === '1')
+  const [tour, setTour] = useState(null) // null | { step }
 
   const savedPos = useMemo(() => { try { return JSON.parse(ls.get(`insp:guide:pos:${uid}`) || 'null') } catch { return null } }, [uid])
   const mx = useMotionValue(savedPos?.x ?? 80)
@@ -210,9 +223,52 @@ export default function Assistant() {
     return () => { evs.forEach((e) => window.removeEventListener(e, bump)); clearInterval(iv) }
   }, [])
 
+  // ── Guided tour (first login) ───────────────────────────────────────────────
+  const tourKey = `insp:guide:tour:${uid}`
+  const startTour = () => { setOpen(false); setTip(null); setAsleep(false); setTour({ step: 0 }) }
+  const nextTourStep = () => setTour((cur) => (cur ? { step: cur.step + 1 } : cur))
+  const endTour = () => {
+    setTour(null)
+    ls.set(tourKey, '1')
+    try { sessionStorage.setItem(`insp:guide:greeted:${uid}`, '1') } catch { /* ignore */ }
+    lastRef.current = Date.now()
+    setMode('idle')
+  }
+
+  // Kick off the walkthrough once, on first login for this user.
+  useEffect(() => {
+    if (!enabled || tour) return undefined
+    if (ls.get(tourKey) === '1') return undefined
+    const t = setTimeout(() => setTour({ step: 0 }), 1000)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, uid])
+
+  // Drive the tour: navigate to each page and walk Sam across the screen.
+  useEffect(() => {
+    if (!tour) return undefined
+    const step = TOUR[tour.step]
+    if (!step) { endTour(); return undefined }
+    setOpen(false); setTip(null); setAsleep(false)
+    if (location.pathname !== step.to) navigate(step.to)
+    if (reduced || pinned) { setMode('wave'); return undefined }
+    // Walk to a fresh spot so Sam visibly travels across the page each step.
+    const from = mx.get()
+    const w = typeof window !== 'undefined' ? window.innerWidth : 1000
+    const target = tour.step % 2 === 0 ? Math.round(w * 0.16) : Math.round(Math.max(120, w * 0.6))
+    setFacing(target >= from ? 1 : -1)
+    setMode('walk')
+    const anim = animate(mx, target, { duration: 0.9, ease: 'linear' })
+    animate(my, 0, { duration: 0.3 })
+    const t = setTimeout(() => setMode('wave'), 950)
+    return () => { if (anim?.stop) anim.stop(); clearTimeout(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tour])
+
   // Movement / pose state machine.
   useEffect(() => {
     if (!enabled) return undefined
+    if (tour) return undefined // the tour drives movement while active
     if (asleep) { setMode('sleep'); return undefined }
     if (open || tip) {
       if (!pinned) { setFacing(-1); animate(mx, homeX(), { duration: 0.7, ease: 'linear' }); animate(my, 0, { duration: 0.4 }) }
@@ -247,11 +303,11 @@ export default function Assistant() {
     }
     t = setTimeout(step, 1400)
     return () => { alive = false; clearTimeout(t); if (anim?.stop) anim.stop() }
-  }, [enabled, asleep, open, tip, writingPage, reduced, pinned, mx, my])
+  }, [enabled, asleep, open, tip, writingPage, reduced, pinned, tour, mx, my])
 
   // Login greeting (once per browser session) → then per-page tips.
   useEffect(() => {
-    if (!enabled || open) return undefined
+    if (!enabled || open || tour) return undefined // tour replaces the greeting/tips while running
     const greetKey = `insp:guide:greeted:${uid}`
     const greeted = (() => { try { return sessionStorage.getItem(greetKey) === '1' } catch { return false } })()
     if (!greeted) {
@@ -265,7 +321,7 @@ export default function Assistant() {
     const seenKey = `insp:guide:tip:${uid}:${guide.title}`
     if (ls.get(seenKey) !== '1') { const t = setTimeout(() => setTip({ title: guide.title, text: guide.tips[0] }), 900); return () => clearTimeout(t) }
     return undefined
-  }, [location.pathname, open, uid, guide, enabled])
+  }, [location.pathname, open, uid, guide, enabled, tour])
 
   const dismissTip = () => {
     if (tip && !tip.greeting) ls.set(`insp:guide:tip:${uid}:${guide.title}`, '1')
@@ -358,9 +414,45 @@ export default function Assistant() {
         </button>
       </motion.div>
 
+      {/* Guided tour coachmark (first login) */}
+      <AnimatePresence mode="wait">
+        {tour && !open && TOUR[tour.step] && (
+          <motion.div
+            key={tour.step}
+            initial={{ opacity: 0, y: 12, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.96, transition: { duration: 0.12 } }}
+            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+            className="fixed bottom-28 left-1/2 z-50 -ml-40 w-[20rem] max-w-[calc(100vw-2.5rem)] rounded-2xl border border-brand-200 bg-clay-surface p-4 shadow-card"
+          >
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-700">
+                <Sparkles size={13} /> Step {tour.step + 1} of {TOUR.length}
+              </span>
+              <button onClick={endTour} className="text-[11px] font-semibold text-ink-400 hover:text-ink-700">Skip tour</button>
+            </div>
+            <p className="mt-2 text-sm font-bold text-ink-900">{TOUR[tour.step].title}</p>
+            <p className="mt-1 text-xs leading-relaxed text-ink-600">{TOUR[tour.step].text}</p>
+            <div className="mt-3 flex items-center justify-between">
+              <div className="flex gap-1">
+                {TOUR.map((_, i) => (
+                  <span key={i} className={`h-1.5 w-1.5 rounded-full ${i === tour.step ? 'bg-brand-600' : 'bg-clay-200'}`} />
+                ))}
+              </div>
+              <button
+                onClick={tour.step === TOUR.length - 1 ? endTour : nextTourStep}
+                className="btn-primary px-3 py-1.5 text-xs"
+              >
+                {tour.step === TOUR.length - 1 ? 'Finish' : 'Next'}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Tip / welcome bubble */}
       <AnimatePresence>
-        {tip && !open && (
+        {tip && !open && !tour && (
           <motion.div
             initial={{ opacity: 0, y: 10, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -414,11 +506,12 @@ export default function Assistant() {
               <button type="submit" className="btn-primary px-3 py-2" disabled={!input.trim() || asking}><Send size={16} /></button>
             </form>
 
-            {/* Controls: roam/pin + hide */}
+            {/* Controls: roam/pin + replay tour + hide */}
             <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] text-ink-400">
               <button onClick={setRoam} className="inline-flex items-center gap-1 hover:text-ink-700" disabled={!pinned}>
                 <Move size={12} /> {pinned ? 'Let Sam roam' : 'Drag Sam to pin him'}
               </button>
+              <button onClick={startTour} className="inline-flex items-center gap-1 hover:text-ink-700"><Sparkles size={12} /> Replay tour</button>
               <button onClick={disableGuide} className="inline-flex items-center gap-1 hover:text-ink-700"><EyeOff size={12} /> Hide guide</button>
             </div>
           </motion.div>
