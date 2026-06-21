@@ -423,7 +423,7 @@ export default function Assistant() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.96, transition: { duration: 0.12 } }}
             transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-            className="fixed bottom-28 left-1/2 z-50 w-[20rem] max-w-[calc(100vw-2.5rem)] -translate-x-1/2 rounded-2xl border border-brand-200 bg-clay-surface p-4 shadow-card"
+            className="fixed bottom-28 left-1/2 z-50 -ml-40 w-[20rem] max-w-[calc(100vw-2.5rem)] rounded-2xl border border-brand-200 bg-clay-surface p-4 shadow-card"
           >
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-700">
